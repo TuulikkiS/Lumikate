@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Lumikate</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<!-- read in javascript libraries for parsing csv: https://github.com/okfn/csv.js  --> 
+<link rel="stylesheet" href="https://unpkg.com/picnic">
+
+</head>
+<body>
+    <h1>Eesti keskmine lumikatte kestus (1891-1994)</h1>
+    <p>
+    Veebileht näitab lumikattega päevade arvu Eesti mõõtmispunktides aastate kaupa.
+    </p>
+    <div>
+        <div class="pool vasak">
+            <img src="talvine-tee.jpg">
+            <p>
+                <b>
+                    Vali mõõtmispunkt
+                </b>
+                <select onchange="newvaluesselected()" id="punkt">
+                    <option value="empty">--------------------</option>
+                </select>
+            </p>
+            <p>
+                <b>
+                    Vali ajavahemik
+                </b>
+                <select onchange="newminselected()" class="aasta" id="miinimum">
+                    <option value="empty">--------------------</option>
+                </select>
+                -
+                <select onchange="newmaxselected()" class="aasta" id="maksimum">
+                    <option value="empty">--------------------</option>
+                </select>
+            </p>
+            <p>
+                <b>Keskmiselt lumikattega päevi: </b> <span id="keskmine"></span>
+            </p>
+        </div>
+        <div class="pool">
+            <table border="1">
+                <tr>
+                    <th>Mõõtmispunkt</th>
+                    <th>Aasta</th>
+                    <th>Lumikattega päevi</th>
+                </tr>
+                <tbody id="result"></tbody>
+            </table>
+            <p>
+                <b>Andmete omanik:</b>
+                <i>
+                    Jaagus, J. 2000. Estonian Mean Snow Depth and Duration (1891-1994), Version 1. [Indicate subset used]. Boulder, Colorado USA. NSIDC: National Snow and Ice Data Center. doi: https://doi.org/10.7265/N5X63JTN. [Vaadatud 27.02.2020].
+                </i>
+            </p>
+            <p>
+                Andmeallikas:
+                <a href="https://opendata.riik.ee/andmehulgad/eesti-keskmine-lume-sugavus-ja-lumikatte-kestus-1891-1994/">Eesti Avaandmete Portaal</a>
+            </p>
+        </div>
+    </div>
+</body>
+    <script>
+        var datarows = [];
+        var selectFilter;
+        var minFilter;
+        var maxFilter;
+        async function fetchdata() {
+            var response = await fetch('http://dijkstra.cs.ttu.ee/~tusill/cgi-bin/serve.py');
+
+            var result = await response.json();
+            result = result.map(function (element) {
+                if (element[2] === 'NARVA-JOESUU') {
+                    element[2] = 'NARVA-JÕESUU'
+                }
+                return element;
+            });
+
+            datarows = result;
+            populateselect();
+        }
+
+        function populateminmaxyears() {
+            var ids = ['miinimum', 'maksimum'];
+
+            ids.forEach(function (id) {
+                var select = document.getElementById(id);
+                var elements = '';
+                var i = 1880;
+                while (i < 2001) {
+                    elements = elements + '<option value="' + i + '">' + i + '</option>';
+                    i = i + 1;
+                }
+                select.innerHTML = select.innerHTML + elements;
+            });
+        }
+
+        function populateselect() {
+            var select = document.getElementById('punkt');
+            var elements = '';
+            var exist =[];
+            var places = datarows.map(function (row) {
+                return row[2]
+            });
+            places.sort();
+            places.forEach(function (place) {
+                if (exist.indexOf(place)>-1) return;
+                exist.push(place);
+                elements = elements + '<option value="' + place + '">' + place + '</option>';
+            });
+
+            select.innerHTML = select.innerHTML + elements;
+        }
+
+        function newminselected() {
+            var selectElement = document.getElementById('miinimum');
+            var index = selectElement.selectedIndex;
+            var minValue = selectElement.children[index].value;
+            minFilter = function (row) {
+                return parseInt(row[3]) >= parseInt(minValue);
+            };
+
+            processdata(datarows);
+        }
+
+        function newmaxselected() {
+            var selectElement = document.getElementById('maksimum');
+            var index = selectElement.selectedIndex;
+            var maxValue = selectElement.children[index].value;
+            maxFilter = function (row) {
+                return parseInt(row[3]) <= parseInt(maxValue);
+            };
+
+            processdata(datarows);
+        }
+
+        function newvaluesselected() {
+            var selectElement = document.getElementById('punkt');
+            var index = selectElement.selectedIndex;
+            var place = selectElement.children[index].value;
+            selectFilter = function (row) {
+                return row[2].trim() === place.trim();
+            };
+
+            processdata(datarows);
+        }
+
+        // processdata takes data rows, builds html string and shows it in the div above
+        function processdata(rows) {
+            if (selectFilter) rows = rows.filter(selectFilter);
+            if (minFilter) rows = rows.filter(minFilter);
+            if (maxFilter) rows = rows.filter(maxFilter);
+            var rownr, colnr, row, el;
+            var result = '';
+            
+            var avarage = 0;
+            // loop over all rows
+            for(rownr=0; rownr<rows.length; rownr++) {
+                row=rows[rownr];
+                result=result+"\n<tr>";
+                // loop over columns in one row
+                for(colnr=0; colnr<row.length; colnr++) {
+                    el=row[colnr];
+                    if (colnr > 1) {
+                        result=result+"<td>"+el+"</td>";
+                    }
+                    if (colnr === 4) avarage = avarage + el;
+                }
+                result=result+"</tr>";
+            }
+            avarage = avarage / rows.length;
+            document.getElementById('keskmine').innerHTML = Math.round(avarage * 100) / 100;
+
+            // put the result html string into the div on the page
+            document.getElementById("result").innerHTML=result;  
+        }
+        fetchdata()
+        populateminmaxyears();
+    </script>
+    <style>
+        body {
+            margin: 40px;
+        }
+
+        img {
+            max-width:100%;
+            max-height:100%;
+        }
+
+        .vasak {
+            vertical-align: top;
+        }
+
+        .pool {
+            width: 49%;
+            display: inline-block;
+        }
+
+        .aasta {
+            width: 30%;
+        }
+    </style>
+</html>
